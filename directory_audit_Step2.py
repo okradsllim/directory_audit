@@ -1,28 +1,3 @@
-
-
-'''
-1. Refined Hyperlink Extraction: I revised the extract_hyperlinks function to use row indices as keys in the hyperlinks dictionary. 
-This aligns with DataFrame indexing, ensuring that each hyperlink is correctly associated with its corresponding row in the DataFrame. 
-I also made sure to handle cases where a cell might not contain a hyperlink by assigning None.
-
-2. Improved 'Extracted Path' Mapping: To properly map the 'Path' column values to the 'Extracted Path' column, I implemented a more efficient approach. 
-By using audit_sheet_df['Extracted Path'] = audit_sheet_df.index + 2 and then applying audit_sheet_df['Extracted Path'].apply(lambda x: hyperlinks.get(x)), 
-I made sure the hyperlinks correctly correspond to the DataFrame rows, considering Excel's row indexing.
-
-3. Enhanced File Renaming Logic: I've added logic in the action_rename function to preserve file extensions when renaming files. 
-This is crucial for maintaining the integrity and functionality of files, especially when they are of specific types like documents or images.
-
-4. Updated Move Functionality: In the action_move function, I now ensure that the target directory is correctly retrieved, 
-either from the folders_to_create dictionary or by defaulting to the BASE_DIRECTORY. 
-This update provides more accurate and flexible file moving capabilities.
-
-5. Interactive Directory Creation: I introduced user prompts to handle cases where directories don't exist within the base directory. 
-This interactive feature not only improves user experience but also gives users control over how the directory structure is managed during the script's execution.
-
-6. Recycle Directory Management: I've incorporated logic to handle situations where a recycle directory is necessary, particularly for delete actions. 
-The script checks if the recycle directory is outside the BASE_DIRECTORY and prompts the user to create it if it doesn't exist, enhancing the script's safety and usability.'''
-
-
 import pandas as pd
 from pathlib import Path
 from shutil import move
@@ -30,7 +5,6 @@ import logging
 import os
 from openpyxl import load_workbook
 import re
-
 
 def extract_hyperlinks(excel_file_path, sheet_name='AuditSheet', target_column_name='Path'):
     wb = load_workbook(excel_file_path, data_only=False)
@@ -101,21 +75,29 @@ def action_rename(original_path, new_name):
         return log_message
 
 def action_move(original_path, move_to_folder_name, folders_to_create, BASE_DIRECTORY):
-    
     logging.debug(f"Attempting to move: {original_path} to {move_to_folder_name}")
-    
-    # Retrieve the target directory from the folders_to_create dictionary or default to combining with BASE_DIRECTORY
-    target_dir = folders_to_create.get(move_to_folder_name, BASE_DIRECTORY / move_to_folder_name)
 
-    # Proceed with the move if the original path exists and the target is a directory
+    # Retrieve the target directory from the folders_to_create dictionary
+    target_dir = folders_to_create.get(move_to_folder_name)
+
     if not original_path.exists():
         log_message = f"Move Failed - Original file/folder does not exist: {original_path}"
+        logging.warning(log_message)
+        return log_message
+
+    if target_dir is None:
+        log_message = f"Move Failed - Target directory not found for: {move_to_folder_name}"
         logging.warning(log_message)
         return log_message
 
     if not target_dir.is_dir():
         log_message = f"Move Failed - Target directory is not a directory: {target_dir}"
         logging.warning(log_message)
+        return log_message
+
+    if original_path.resolve() == target_dir.resolve():
+        log_message = "Move Skipped - Source and target are identical"
+        logging.info(log_message)
         return log_message
 
     try:
@@ -181,16 +163,17 @@ def perform_actions(audit_sheet_df, recycle_dir_path, folders_to_create, action_
                 logging.info(status[-1])
 
             elif action == 'move' and move_to:
-                if move_to in folders_to_create or (BASE_DIRECTORY / move_to).exists():
-                    result = action_move(original_path, move_to, folders_to_create, BASE_DIRECTORY)
-                    status.append(result)
-                else:
-                    status.append(f"Failed - Target directory not found for moving: {move_to}")
+                result = action_move(original_path, move_to, folders_to_create, BASE_DIRECTORY)
+                status.append(result) 
                 logging.info(status[-1])
                 
             elif action == 'delete':
                 result = action_delete(original_path, recycle_dir_path)
                 status.append(result)
+                logging.info(status[-1])
+                
+            else:
+                status.append(f"Failed - Target directory not found for moving: {move_to}")
                 logging.info(status[-1])
 
         action_logs.append({'Action': ', '.join(actions), 'Path': str(original_path), 'Status': '; '.join(status)})
@@ -255,46 +238,48 @@ def main():
     if valid_action_rows.empty:
         print("No valid actions (delete, rename, move) found in the 'Action' column. Exiting program.")
         return
-    
-    #input_excel_file = get_validated_path("Enter the path to the Excel file: ", should_exist=True, is_directory=False)
-    #hyperlinks = extract_hyperlinks(input_excel_file)
-    #audit_sheet_df['Extracted Path'] = audit_sheet_df.index + 2  # +2 because Excel rows start at 1 and header is at row 1
-    #audit_sheet_df['Extracted Path'] = audit_sheet_df['Extracted Path'].apply(lambda x: hyperlinks.get(x))
-    # Normalize actions to lowercase for consistent processing
-    # audit_sheet_df['Action'] = audit_sheet_df['Action'].fillna('').astype(str).str.lower().str.strip()
 
     # Extract Hyperlinks
     hyperlinks = extract_hyperlinks(input_excel_file)
-    valid_action_rows['Extracted Path'] = valid_action_rows.index + 2
-    valid_action_rows['Extracted Path'] = valid_action_rows['Extracted Path'].apply(lambda x: hyperlinks.get(x))
+    valid_action_rows.loc[:, 'Extracted Path'] = valid_action_rows.index + 2
+    valid_action_rows.loc[:, 'Extracted Path'] = valid_action_rows['Extracted Path'].apply(lambda x: hyperlinks.get(x))
     
     # Determine the Base Directory
     BASE_DIRECTORY = extract_base_directory(valid_action_rows['Extracted Path'])
     print(f"Base directory: {BASE_DIRECTORY}")
-
-    # Extract unique folder names from the 'Move to…' column where the action is 'move'
+                
     move_to_folders = audit_sheet_df[audit_sheet_df['Action'].str.contains('move', na=False)]['Move to…'].unique()
-
     folders_to_create = {}
 
     for folder_name in move_to_folders:
-        folder_path = BASE_DIRECTORY / folder_name
-        if not folder_path.exists():
-            create_folder = input(f"The folder '{folder_name}' does not exist in the base directory. Do you want to create it? (yes/no): ").strip().lower()
-            if create_folder == 'yes':
-                # Create the folder and log the action
-                folders_to_create[folder_name] = folder_path
-                folder_path.mkdir(parents=True, exist_ok=True)
-                logging.info(f"Directory created: {folder_path}")
-                print(f"Directory created: {folder_path}")
-            elif create_folder == 'no':
-                # Log the decision and use BASE_DIRECTORY for the move
-                logging.warning(f"'{folder_name}' folder creation skipped by user. Defaulting move to BASE_DIRECTORY.")
-                print(f"Proceeding without creating the '{folder_name}' folder. Files will be moved to the base directory.")
-                folders_to_create[folder_name] = BASE_DIRECTORY
-            else:
-                logging.error("Invalid input received for folder creation choice.")
-                print("Invalid input. Please type 'yes' or 'no'.")
+        found_folder_path = None
+        
+        # Check in subdirectories of BASE_DIRECTORY and its siblings
+        potential_directories = [BASE_DIRECTORY] + [x for x in BASE_DIRECTORY.parent.iterdir() if x.is_dir()]
+        for dir in potential_directories:
+            potential_folder_path = dir / folder_name
+            if potential_folder_path.exists():
+                found_folder_path = potential_folder_path
+                break
+
+        # Iterate through each parent of the BASE_DIRECTORY in reverse order
+        if found_folder_path is None:
+            for parent in reversed(BASE_DIRECTORY.parents):
+                potential_folder_path = parent / folder_name
+                if potential_folder_path.exists():
+                    found_folder_path = potential_folder_path
+                    break
+            
+        # Create the folder as a sibling of BASE_DIRECTORY if not found
+        if found_folder_path is None:
+            folder_path_to_create = BASE_DIRECTORY.parent / folder_name
+            folder_path_to_create.mkdir(parents=True, exist_ok=True)
+            logging.info(f"Directory created: {folder_path_to_create}")
+            print(f"Directory created: {folder_path_to_create}")
+            folders_to_create[folder_name] = folder_path_to_create
+        else:
+            logging.info(f"Folder found: {found_folder_path}")
+            folders_to_create[folder_name] = found_folder_path
 
 
     if audit_sheet_df['Action'].str.contains(r'delete', case=False, na=False).any():
@@ -325,7 +310,6 @@ def main():
                 break
     else:
         recycle_dir_path = None 
-
 
     # Performing actions
     perform_actions(valid_action_rows, recycle_dir_path, folders_to_create, action_logs, BASE_DIRECTORY)

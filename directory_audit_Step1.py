@@ -1,10 +1,3 @@
-# Option 1 audit and exclusion works. Takes a while on the network drive.
-# Option 1 excluding two folders also worked with my one of my local folders
-# It successfully creates two worksheets in one workbook: RawData and AuditSheet
-# RawData has File Name	File Path;	File Type;	File Size (MB);	Date Created;	Last Modified;	Owner
-# AuditSheet has Name	Item Type;	Owner;	Date Created;	Last Modified;	Path;	Consult staff?;	Proposed retention;	Justification;	Move to…;	Notes
-
-
 import os
 import logging
 import pandas as pd
@@ -17,7 +10,6 @@ import psutil
 
 desktop_path = os.path.join(os.path.expanduser("~"), 'Desktop')
 
-# Configure logging to capture errors
 logging.basicConfig(filename='error.log', level=logging.ERROR)
 
 def audit_directory_process(desktop_path):
