@@ -3,7 +3,7 @@
 
 ## Overview
 
-This repository contains two Python scripts developed as part of my involvement in the Documentation Audit Task Force at [Your Organization]. The goal of this task force was to audit current and legacy documentation across different units and develop a plan for effective documentation management that aligns with organizational standards.
+This repository contains two Python scripts developed as part of my involvement in the Documentation Audit Task Force at the ADU (Beinecke). The goal of this task force was to audit current and legacy documentation across different units and develop a plan for effective documentation management that aligns with organizational standards.
 
 ## Scripts
 
@@ -66,11 +66,3 @@ This repository contains two Python scripts developed as part of my involvement 
    ```bash
    python Step2.py
    ```
-
-## Contributing
-
-Contributions to enhance the functionality of these scripts are welcome, especially as we look to fully implement `Step2.py` with robust error handling and user-friendly features.
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.
